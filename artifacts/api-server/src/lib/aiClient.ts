@@ -46,6 +46,24 @@ export function getAIConfig(): AIConfig {
     return { provider, client, model };
   }
 
+  if (provider === "github-copilot") {
+    const { token, baseUrl, model } = s.githubCopilot;
+    if (!token) {
+      throw new Error(
+        "GitHub Copilot selected but no token is set. Open Settings to add a Copilot/GitHub token, and make sure your local Copilot wrapper (e.g. copilot-api) is running.",
+      );
+    }
+    const client = new OpenAI({
+      apiKey: token,
+      baseURL: baseUrl,
+      defaultHeaders: {
+        "Editor-Version": "vscode/1.95.0",
+        "Copilot-Integration-Id": "vscode-chat",
+      },
+    });
+    return { provider, client, model };
+  }
+
   // Default: OpenAI-compatible
   const { apiKey, baseUrl, model } = s.openai;
   if (!apiKey) {

@@ -71,7 +71,7 @@ function walkFolder(
           .createHash("sha1")
           .update(`${folderPath}|${subject ?? ""}|${date.toISOString()}|${senderEmail ?? ""}`)
           .digest("hex");
-        const body = (msg.bodyPreview || msg.body || "").trim();
+        const body = (msg.bodyPrefix || msg.body || "").trim();
         out.push({
           id,
           subject,

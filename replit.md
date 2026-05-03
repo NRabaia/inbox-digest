@@ -20,6 +20,7 @@ Providers (`aiProvider` field):
 - `openai` (default) — `OPENAI_API_KEY` / `OPENAI_BASE_URL` / `OPENAI_MODEL`. Also accepts Replit AI Integrations env vars.
 - `azure` — `AZURE_OPENAI_BASE_URL`, `AZURE_OPENAI_API_KEY`, `AZURE_OPENAI_DEPLOYMENT`, `AZURE_OPENAI_API_VERSION`. This is the supported way to call Microsoft 365 Copilot's underlying engine.
 - `ollama` — fully offline. `OLLAMA_BASE_URL` (default `http://localhost:11434/v1`), `OLLAMA_MODEL` (default `llama3.2`).
+- `github-copilot` — GitHub Copilot via a community wrapper (e.g. `npx copilot-api start`, default `http://localhost:4141/v1`). The wrapper exposes Copilot's chat as OpenAI-compatible. Settings: `GITHUB_COPILOT_TOKEN`, `GITHUB_COPILOT_BASE_URL`, `GITHUB_COPILOT_MODEL`. Sends `Editor-Version` and `Copilot-Integration-Id` headers. Requires an active Copilot subscription; using Copilot's chat outside official IDE clients is gray-area per GitHub's terms — UI calls this out.
 - `windows-copilot` — Windows Copilot has NO programmatic API. When this provider is selected, the backend skips automatic summarization and the frontend shows an "Ask Copilot" button per email that deep-links into the Copilot app via `ms-copilot:?q=<prompt>`. The user gets the answer in the Copilot app, not back in Inbox Digest.
 
 Routes: `GET /api/config` (provider name + flags), `GET /api/settings` (full settings, secrets redacted), `POST /api/settings` (update; empty strings are stripped so they don't blank-out saved secrets).

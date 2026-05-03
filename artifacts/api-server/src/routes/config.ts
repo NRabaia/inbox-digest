@@ -9,10 +9,18 @@ import {
 
 const router: IRouter = Router();
 
-const PROVIDERS: AIProvider[] = ["openai", "azure", "ollama", "windows-copilot"];
+const PROVIDERS: AIProvider[] = [
+  "openai",
+  "azure",
+  "ollama",
+  "github-copilot",
+  "windows-copilot",
+];
 
 const updateSchema = z.object({
-  aiProvider: z.enum(["openai", "azure", "ollama", "windows-copilot"]).optional(),
+  aiProvider: z
+    .enum(["openai", "azure", "ollama", "github-copilot", "windows-copilot"])
+    .optional(),
   openai: z
     .object({
       apiKey: z.string().optional(),
@@ -32,6 +40,14 @@ const updateSchema = z.object({
     .optional(),
   ollama: z
     .object({
+      baseUrl: z.string().optional(),
+      model: z.string().optional(),
+    })
+    .partial()
+    .optional(),
+  githubCopilot: z
+    .object({
+      token: z.string().optional(),
       baseUrl: z.string().optional(),
       model: z.string().optional(),
     })
@@ -87,6 +103,7 @@ router.post("/settings", (req, res) => {
     openai: stripEmpty(parsed.data.openai) as never,
     azure: stripEmpty(parsed.data.azure) as never,
     ollama: stripEmpty(parsed.data.ollama) as never,
+    githubCopilot: stripEmpty(parsed.data.githubCopilot) as never,
     outlook: stripEmpty(parsed.data.outlook) as never,
   });
   res.json(getRedactedSettings());

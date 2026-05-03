@@ -14,15 +14,21 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Loader2, Sparkles } from "lucide-react";
 
-type Provider = "openai" | "azure" | "ollama" | "windows-copilot";
+type Provider = "openai" | "azure" | "ollama" | "github-copilot" | "windows-copilot";
 
 interface SettingsResponse {
   aiProvider: Provider;
   openai: { apiKey: string; baseUrl: string; model: string };
   azure: { apiKey: string; baseUrl: string; deployment: string; apiVersion: string };
   ollama: { baseUrl: string; model: string };
+  githubCopilot: { token: string; baseUrl: string; model: string };
   outlook: { accessToken: string };
-  hasSecrets: { openaiApiKey: boolean; azureApiKey: boolean; outlookAccessToken: boolean };
+  hasSecrets: {
+    openaiApiKey: boolean;
+    azureApiKey: boolean;
+    githubCopilotToken: boolean;
+    outlookAccessToken: boolean;
+  };
 }
 
 interface Props {
@@ -49,6 +55,7 @@ export function SettingsDialog({ open, onOpenChange, onSaved }: Props) {
           ...data,
           openai: { ...data.openai, apiKey: "" },
           azure: { ...data.azure, apiKey: "" },
+          githubCopilot: { ...data.githubCopilot, token: "" },
           outlook: { accessToken: "" },
         });
       })
@@ -76,6 +83,7 @@ export function SettingsDialog({ open, onOpenChange, onSaved }: Props) {
           openai: s.openai,
           azure: s.azure,
           ollama: s.ollama,
+          githubCopilot: s.githubCopilot,
           outlook: s.outlook,
         }),
       });
@@ -117,6 +125,7 @@ export function SettingsDialog({ open, onOpenChange, onSaved }: Props) {
                   { v: "openai", label: "OpenAI" },
                   { v: "azure", label: "Azure OpenAI" },
                   { v: "ollama", label: "Ollama (offline)" },
+                  { v: "github-copilot", label: "GitHub Copilot (wrapper)" },
                   { v: "windows-copilot", label: "Windows Copilot" },
                 ].map((opt) => (
                   <label
@@ -135,11 +144,12 @@ export function SettingsDialog({ open, onOpenChange, onSaved }: Props) {
             </div>
 
             <Tabs value={s.aiProvider} onValueChange={(v) => setS({ ...s, aiProvider: v as Provider })}>
-              <TabsList className="grid grid-cols-4 w-full">
+              <TabsList className="grid grid-cols-5 w-full">
                 <TabsTrigger value="openai">OpenAI</TabsTrigger>
                 <TabsTrigger value="azure">Azure</TabsTrigger>
                 <TabsTrigger value="ollama">Ollama</TabsTrigger>
-                <TabsTrigger value="windows-copilot">Copilot</TabsTrigger>
+                <TabsTrigger value="github-copilot">GH Copilot</TabsTrigger>
+                <TabsTrigger value="windows-copilot">Win Copilot</TabsTrigger>
               </TabsList>
 
               <TabsContent value="openai" className="flex flex-col gap-3 pt-3">
@@ -220,6 +230,46 @@ export function SettingsDialog({ open, onOpenChange, onSaved }: Props) {
                   Fully offline. Install <a className="underline" href="https://ollama.com" target="_blank" rel="noreferrer">Ollama</a>,
                   then run <code>ollama pull {s.ollama.model || "llama3.2"}</code>. Nothing leaves your machine.
                 </p>
+              </TabsContent>
+
+              <TabsContent value="github-copilot" className="flex flex-col gap-3 pt-3">
+                <Field label={`Copilot Token${s.hasSecrets.githubCopilotToken ? " (saved — leave blank to keep)" : ""}`}>
+                  <Input
+                    type="password"
+                    placeholder={s.hasSecrets.githubCopilotToken ? "•••••••• (saved)" : "ghu_... or wrapper API key"}
+                    value={s.githubCopilot.token}
+                    onChange={(e) => update("githubCopilot", { token: e.target.value })}
+                  />
+                </Field>
+                <Field label="Wrapper Base URL">
+                  <Input
+                    value={s.githubCopilot.baseUrl}
+                    onChange={(e) => update("githubCopilot", { baseUrl: e.target.value })}
+                  />
+                </Field>
+                <Field label="Model">
+                  <Input
+                    value={s.githubCopilot.model}
+                    onChange={(e) => update("githubCopilot", { model: e.target.value })}
+                  />
+                </Field>
+                <div className="rounded-md border border-blue-200 bg-blue-50 p-3 text-xs text-blue-900">
+                  <p className="font-semibold mb-1">Requires a local Copilot wrapper.</p>
+                  <p>
+                    GitHub Copilot doesn't ship an official chat REST API, but community wrappers
+                    expose it as OpenAI-compatible. Install one of these and point the Base URL above
+                    at it:
+                  </p>
+                  <ul className="list-disc ml-4 mt-1 space-y-0.5">
+                    <li><code>npx copilot-api@latest start</code> → http://localhost:4141/v1</li>
+                    <li><a className="underline" href="https://github.com/aaamoon/copilot-gpt4-service" target="_blank" rel="noreferrer">copilot-gpt4-service</a> (Docker)</li>
+                  </ul>
+                  <p className="mt-2">
+                    The token is your GitHub OAuth token from the wrapper, or the wrapper's own API key.
+                    You need an active GitHub Copilot subscription. Use of GitHub Copilot's API outside its IDE
+                    integrations may not be supported by GitHub — check your terms.
+                  </p>
+                </div>
               </TabsContent>
 
               <TabsContent value="windows-copilot" className="flex flex-col gap-3 pt-3">

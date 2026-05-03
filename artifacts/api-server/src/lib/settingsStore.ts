@@ -2,7 +2,12 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-export type AIProvider = "openai" | "azure" | "ollama" | "windows-copilot";
+export type AIProvider =
+  | "openai"
+  | "azure"
+  | "ollama"
+  | "windows-copilot"
+  | "github-copilot";
 
 export interface Settings {
   aiProvider: AIProvider;
@@ -18,6 +23,11 @@ export interface Settings {
     apiVersion: string;
   };
   ollama: {
+    baseUrl: string;
+    model: string;
+  };
+  githubCopilot: {
+    token: string;
     baseUrl: string;
     model: string;
   };
@@ -45,6 +55,11 @@ const DEFAULTS: Settings = {
   ollama: {
     baseUrl: "http://localhost:11434/v1",
     model: "llama3.2",
+  },
+  githubCopilot: {
+    token: "",
+    baseUrl: "http://localhost:4141/v1",
+    model: "gpt-4o",
   },
   outlook: {
     accessToken: "",
@@ -93,6 +108,18 @@ function applyEnvOverlay(s: Settings): Settings {
       model:
         s.ollama.model || process.env["OLLAMA_MODEL"] || DEFAULTS.ollama.model,
     },
+    githubCopilot: {
+      token:
+        s.githubCopilot.token || process.env["GITHUB_COPILOT_TOKEN"] || "",
+      baseUrl:
+        s.githubCopilot.baseUrl ||
+        process.env["GITHUB_COPILOT_BASE_URL"] ||
+        DEFAULTS.githubCopilot.baseUrl,
+      model:
+        s.githubCopilot.model ||
+        process.env["GITHUB_COPILOT_MODEL"] ||
+        DEFAULTS.githubCopilot.model,
+    },
     outlook: {
       accessToken:
         s.outlook.accessToken || process.env["OUTLOOK_ACCESS_TOKEN"] || "",
@@ -105,6 +132,7 @@ const EMPTY_PERSISTED: Settings = {
   openai: { apiKey: "", baseUrl: "", model: "" },
   azure: { apiKey: "", baseUrl: "", deployment: "", apiVersion: "" },
   ollama: { baseUrl: "", model: "" },
+  githubCopilot: { token: "", baseUrl: "", model: "" },
   outlook: { accessToken: "" },
 };
 
@@ -120,6 +148,10 @@ function loadFromDisk(): Settings {
         openai: { ...EMPTY_PERSISTED.openai, ...(parsed.openai ?? {}) },
         azure: { ...EMPTY_PERSISTED.azure, ...(parsed.azure ?? {}) },
         ollama: { ...EMPTY_PERSISTED.ollama, ...(parsed.ollama ?? {}) },
+        githubCopilot: {
+          ...EMPTY_PERSISTED.githubCopilot,
+          ...(parsed.githubCopilot ?? {}),
+        },
         outlook: { ...EMPTY_PERSISTED.outlook, ...(parsed.outlook ?? {}) },
       };
     }
@@ -141,6 +173,7 @@ export function saveSettings(next: Partial<Settings>): Settings {
     openai: { ...current.openai, ...(next.openai ?? {}) },
     azure: { ...current.azure, ...(next.azure ?? {}) },
     ollama: { ...current.ollama, ...(next.ollama ?? {}) },
+    githubCopilot: { ...current.githubCopilot, ...(next.githubCopilot ?? {}) },
     outlook: { ...current.outlook, ...(next.outlook ?? {}) },
   };
   fs.mkdirSync(CONFIG_DIR, { recursive: true, mode: 0o700 });
@@ -171,10 +204,12 @@ export function getRedactedSettings() {
     openai: { ...s.openai, apiKey: redact(s.openai.apiKey) },
     azure: { ...s.azure, apiKey: redact(s.azure.apiKey) },
     ollama: s.ollama,
+    githubCopilot: { ...s.githubCopilot, token: redact(s.githubCopilot.token) },
     outlook: { accessToken: redact(s.outlook.accessToken) },
     hasSecrets: {
       openaiApiKey: Boolean(s.openai.apiKey),
       azureApiKey: Boolean(s.azure.apiKey),
+      githubCopilotToken: Boolean(s.githubCopilot.token),
       outlookAccessToken: Boolean(s.outlook.accessToken),
     },
   };
