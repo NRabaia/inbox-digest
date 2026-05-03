@@ -11,11 +11,12 @@ import type { Email, EmailSummary } from "@workspace/api-client-react/src/genera
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
-import { Calendar as CalendarIcon, Loader2, Mail, CheckCircle2, AlertCircle, ArrowRight, XCircle, Inbox, Link as LinkIcon, RefreshCcw, UploadCloud } from "lucide-react";
+import { Calendar as CalendarIcon, Loader2, Mail, CheckCircle2, AlertCircle, ArrowRight, XCircle, Inbox, Link as LinkIcon, RefreshCcw, UploadCloud, Settings as SettingsIcon, Sparkles } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { SettingsDialog, buildCopilotLink } from "@/components/SettingsDialog";
 
 type Config = {
   aiProvider?: string;
@@ -34,16 +35,23 @@ export default function Home() {
   const [uploadedEmails, setUploadedEmails] = useState<Email[]>([]);
   const [isUploading, setIsUploading] = useState(false);
   const [config, setConfig] = useState<Config | null>(null);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const isoDate = date.toISOString();
 
-  useEffect(() => {
+  const reloadConfig = () => {
     fetch('/api/config')
       .then(res => res.json())
       .then(data => setConfig(data))
       .catch(console.error);
+  };
+
+  useEffect(() => {
+    reloadConfig();
   }, []);
+
+  const isCopilotMode = config?.aiProvider === "windows-copilot";
 
   // Queries (only enabled in live mode)
   const { 
@@ -78,7 +86,7 @@ export default function Home() {
     setIsAnalyzing(true);
     setSummaries([]);
     refetchEmails().then((result) => {
-      if (result.data && result.data.length > 0) {
+      if (result.data && result.data.length > 0 && !isCopilotMode) {
         summarizeMutation.mutate({ data: { emails: result.data } }, {
           onSuccess: (data) => {
             setSummaries(data);
@@ -113,15 +121,19 @@ export default function Home() {
       const emails: Email[] = await res.json();
       setUploadedEmails(emails);
       
-      setIsAnalyzing(true);
       setHasStarted(true);
-      summarizeMutation.mutate({ data: { emails } }, {
-        onSuccess: (data) => {
-          setSummaries(data);
-          setIsAnalyzing(false);
-        },
-        onError: () => setIsAnalyzing(false)
-      });
+      if (isCopilotMode) {
+        setIsAnalyzing(false);
+      } else {
+        setIsAnalyzing(true);
+        summarizeMutation.mutate({ data: { emails } }, {
+          onSuccess: (data) => {
+            setSummaries(data);
+            setIsAnalyzing(false);
+          },
+          onError: () => setIsAnalyzing(false)
+        });
+      }
     } catch (err) {
       console.error(err);
       setIsUploading(false);
@@ -200,7 +212,7 @@ export default function Home() {
             Inbox Digest
           </h1>
           <p className="text-muted-foreground mt-1 text-lg">Your calm, prioritized catch-up assistant.</p>
-          <div className="flex items-center gap-2 mt-3">
+          <div className="flex items-center gap-2 mt-3 flex-wrap">
             {config?.aiProvider && (
               <Badge variant="secondary" className="font-normal text-xs px-2 py-0.5">
                 AI: {config.aiProvider}
@@ -216,6 +228,15 @@ export default function Home() {
                 Outlook not connected — upload .eml instead
               </Badge>
             )}
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setSettingsOpen(true)}
+              className="h-6 px-2 text-xs"
+            >
+              <SettingsIcon className="w-3 h-3 mr-1" />
+              Settings
+            </Button>
           </div>
         </div>
 
@@ -445,13 +466,25 @@ export default function Home() {
                             )}
                           </CardContent>
                           
-                          {email.webLink && (
-                            <CardFooter className="pt-0 justify-end">
+                          <CardFooter className="pt-0 justify-end gap-2">
+                            {isCopilotMode && (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => {
+                                  const prompt = `Summarize this email and tell me if it needs a reply:\n\nFrom: ${email.from} <${email.fromEmail}>\nSubject: ${email.subject}\n\n${email.bodyPreview ?? ""}`;
+                                  window.location.href = buildCopilotLink(prompt);
+                                }}
+                              >
+                                <Sparkles className="w-3 h-3 mr-1" /> Ask Copilot
+                              </Button>
+                            )}
+                            {email.webLink && (
                               <Button variant="ghost" size="sm" className="text-primary hover:text-primary hover:bg-primary/5" onClick={() => window.open(email.webLink || '', '_blank')}>
                                 Open in Outlook <ArrowRight className="ml-2 w-3 h-3" />
                               </Button>
-                            </CardFooter>
-                          )}
+                            )}
+                          </CardFooter>
                         </Card>
                       ))}
                     </div>
@@ -487,6 +520,12 @@ export default function Home() {
 
         </div>
       )}
+
+      <SettingsDialog
+        open={settingsOpen}
+        onOpenChange={setSettingsOpen}
+        onSaved={reloadConfig}
+      />
     </div>
   );
 }

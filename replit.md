@@ -14,11 +14,15 @@ A website that loads Outlook emails, summarizes them with AI, and flags ones nee
 - `standalone/` — Self‑contained Windows/Mac/Linux build. `pnpm --filter @workspace/standalone run build` produces `standalone/dist/{server.mjs, public/, start.bat, start.sh, README.md, .env.example}`. `pack-windows.mjs` produces a single `InboxDigest.exe` via Node SEA.
 
 ### AI Provider Abstraction
-`artifacts/api-server/src/lib/aiClient.ts` switches via `AI_PROVIDER` env:
-- `openai` (default) — uses `OPENAI_API_KEY` or Replit AI Integrations env vars.
-- `azure` — uses `AZURE_OPENAI_BASE_URL`, `AZURE_OPENAI_API_KEY`, `AZURE_OPENAI_DEPLOYMENT`, `AZURE_OPENAI_API_VERSION`.
+Settings live in `~/.inbox-digest/config.json` (created by `lib/settingsStore.ts`). Env vars overlay only when the stored value is empty, so both modes work. Configurable from the UI Settings dialog or by editing the JSON file directly.
+
+Providers (`aiProvider` field):
+- `openai` (default) — `OPENAI_API_KEY` / `OPENAI_BASE_URL` / `OPENAI_MODEL`. Also accepts Replit AI Integrations env vars.
+- `azure` — `AZURE_OPENAI_BASE_URL`, `AZURE_OPENAI_API_KEY`, `AZURE_OPENAI_DEPLOYMENT`, `AZURE_OPENAI_API_VERSION`. This is the supported way to call Microsoft 365 Copilot's underlying engine.
 - `ollama` — fully offline. `OLLAMA_BASE_URL` (default `http://localhost:11434/v1`), `OLLAMA_MODEL` (default `llama3.2`).
-Microsoft/GitHub Copilot has no public chat API and no Replit integration — not supported as a provider.
+- `windows-copilot` — Windows Copilot has NO programmatic API. When this provider is selected, the backend skips automatic summarization and the frontend shows an "Ask Copilot" button per email that deep-links into the Copilot app via `ms-copilot:?q=<prompt>`. The user gets the answer in the Copilot app, not back in Inbox Digest.
+
+Routes: `GET /api/config` (provider name + flags), `GET /api/settings` (full settings, secrets redacted), `POST /api/settings` (update; empty strings are stripped so they don't blank-out saved secrets).
 
 ### Standalone Notes
 - `standalone/` is a workspace package with its own deps (express, pino, openai, etc.) so esbuild can bundle the api‑server's `app` import.

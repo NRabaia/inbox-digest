@@ -6,11 +6,17 @@ import {
 } from "@workspace/api-zod";
 import { batchProcess } from "@workspace/integrations-openai-ai-server/batch";
 import { getAIConfig } from "../lib/aiClient";
+import { getSettings } from "../lib/settingsStore";
 
 const router: IRouter = Router();
 
-// Helper to get Outlook access token from Replit connectors
+// Helper to get Outlook access token. Priority:
+//  1. Token saved via Settings UI (~/.inbox-digest/config.json or env overlay)
+//  2. Replit connectors API (when running on Replit with Outlook connector)
 async function getOutlookToken(): Promise<string | null> {
+  const stored = getSettings().outlook.accessToken;
+  if (stored) return stored;
+
   try {
     const hostname = process.env["REPLIT_CONNECTORS_HOSTNAME"];
     const replIdentity = process.env["REPL_IDENTITY"];
