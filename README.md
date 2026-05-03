@@ -7,6 +7,18 @@
 [![Offline-capable](https://img.shields.io/badge/runs-offline-success.svg)](#)
 [![Five AI providers](https://img.shields.io/badge/AI-5_providers-purple.svg)](#-ai-providers)
 
+## Download (no build required)
+
+Grab a prebuilt copy from the [latest GitHub Release](https://github.com/NRabaia/inbox-digest/releases/latest):
+
+- **Windows** — [`inbox-digest-windows.zip`](https://github.com/NRabaia/inbox-digest/releases/latest/download/inbox-digest-windows.zip) — unzip and double-click `InboxDigest.exe`. Node.js is bundled inside, no install needed.
+- **macOS** — [`inbox-digest-mac.zip`](https://github.com/NRabaia/inbox-digest/releases/latest/download/inbox-digest-mac.zip) — unzip, then `./start.sh`. Requires Node.js 20+.
+- **Linux** — [`inbox-digest-linux.zip`](https://github.com/NRabaia/inbox-digest/releases/latest/download/inbox-digest-linux.zip) — unzip, then `./start.sh`. Requires Node.js 20+.
+
+All zips include the bundled frontend, server, and `nodemailer` dependency, so no `npm install` is needed at runtime. On first launch, copy `.env.example` to `.env` and set your AI provider key.
+
+## Three Ways to Run It
+
 ---
 
 ## Table of contents
