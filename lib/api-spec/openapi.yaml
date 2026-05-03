@@ -10,6 +10,8 @@ servers:
 tags:
   - name: health
     description: Health operations
+  - name: emails
+    description: Email operations
 paths:
   /healthz:
     get:
@@ -24,6 +26,103 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+
+  /emails:
+    get:
+      operationId: getEmails
+      tags: [emails]
+      summary: Fetch emails from Outlook
+      description: Loads emails from Outlook inbox with optional date range
+      parameters:
+        - name: since
+          in: query
+          required: false
+          schema:
+            type: string
+          description: ISO date string - fetch emails since this date
+        - name: top
+          in: query
+          required: false
+          schema:
+            type: integer
+          description: Maximum number of emails to return (default 50)
+      responses:
+        "200":
+          description: List of emails
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Email"
+        "401":
+          description: Not connected to Outlook
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /emails/summarize:
+    post:
+      operationId: summarizeEmails
+      tags: [emails]
+      summary: Summarize a batch of emails with AI
+      description: Uses AI to summarize emails and flag those needing a response
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SummarizeEmailsBody"
+      responses:
+        "200":
+          description: Summary results
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/EmailSummary"
+        "500":
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /emails/digest:
+    get:
+      operationId: getEmailDigest
+      tags: [emails]
+      summary: Get overall inbox digest
+      description: Returns aggregated stats and highlights about the inbox
+      parameters:
+        - name: since
+          in: query
+          required: false
+          schema:
+            type: string
+          description: ISO date string - digest for emails since this date
+      responses:
+        "200":
+          description: Inbox digest
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InboxDigest"
+        "401":
+          description: Not connected to Outlook
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
 components:
   schemas:
     HealthStatus:
@@ -34,3 +133,120 @@ components:
       required:
         - status
 
+    Email:
+      type: object
+      properties:
+        id:
+          type: string
+        subject:
+          type: ["string", "null"]
+        bodyPreview:
+          type: ["string", "null"]
+        from:
+          type: ["string", "null"]
+        fromEmail:
+          type: ["string", "null"]
+        receivedAt:
+          type: string
+        isRead:
+          type: boolean
+        importance:
+          type: string
+          enum: [low, normal, high]
+        hasAttachments:
+          type: boolean
+        webLink:
+          type: ["string", "null"]
+      required:
+        - id
+        - receivedAt
+        - isRead
+        - importance
+        - hasAttachments
+
+    EmailSummary:
+      type: object
+      properties:
+        emailId:
+          type: string
+        subject:
+          type: ["string", "null"]
+        from:
+          type: ["string", "null"]
+        receivedAt:
+          type: string
+        summary:
+          type: string
+        needsReply:
+          type: boolean
+        urgency:
+          type: string
+          enum: [low, medium, high]
+        suggestedAction:
+          type: ["string", "null"]
+        keyPoints:
+          type: array
+          items:
+            type: string
+      required:
+        - emailId
+        - receivedAt
+        - summary
+        - needsReply
+        - urgency
+        - keyPoints
+
+    InboxDigest:
+      type: object
+      properties:
+        totalEmails:
+          type: integer
+        unreadEmails:
+          type: integer
+        needsReplyCount:
+          type: integer
+        highUrgencyCount:
+          type: integer
+        topSenders:
+          type: array
+          items:
+            $ref: "#/components/schemas/SenderCount"
+        earliestEmail:
+          type: ["string", "null"]
+        latestEmail:
+          type: ["string", "null"]
+      required:
+        - totalEmails
+        - unreadEmails
+        - needsReplyCount
+        - highUrgencyCount
+        - topSenders
+
+    SenderCount:
+      type: object
+      properties:
+        sender:
+          type: string
+        count:
+          type: integer
+      required:
+        - sender
+        - count
+
+    SummarizeEmailsBody:
+      type: object
+      properties:
+        emails:
+          type: array
+          items:
+            $ref: "#/components/schemas/Email"
+      required:
+        - emails
+
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+      required:
+        - error

@@ -8,3 +8,97 @@
 export interface HealthStatus {
   status: string;
 }
+
+export type EmailImportance =
+  (typeof EmailImportance)[keyof typeof EmailImportance];
+
+export const EmailImportance = {
+  low: "low",
+  normal: "normal",
+  high: "high",
+} as const;
+
+export interface Email {
+  id: string;
+  /** @nullable */
+  subject?: string | null;
+  /** @nullable */
+  bodyPreview?: string | null;
+  /** @nullable */
+  from?: string | null;
+  /** @nullable */
+  fromEmail?: string | null;
+  receivedAt: string;
+  isRead: boolean;
+  importance: EmailImportance;
+  hasAttachments: boolean;
+  /** @nullable */
+  webLink?: string | null;
+}
+
+export type EmailSummaryUrgency =
+  (typeof EmailSummaryUrgency)[keyof typeof EmailSummaryUrgency];
+
+export const EmailSummaryUrgency = {
+  low: "low",
+  medium: "medium",
+  high: "high",
+} as const;
+
+export interface EmailSummary {
+  emailId: string;
+  /** @nullable */
+  subject?: string | null;
+  /** @nullable */
+  from?: string | null;
+  receivedAt: string;
+  summary: string;
+  needsReply: boolean;
+  urgency: EmailSummaryUrgency;
+  /** @nullable */
+  suggestedAction?: string | null;
+  keyPoints: string[];
+}
+
+export interface SenderCount {
+  sender: string;
+  count: number;
+}
+
+export interface InboxDigest {
+  totalEmails: number;
+  unreadEmails: number;
+  needsReplyCount: number;
+  highUrgencyCount: number;
+  topSenders: SenderCount[];
+  /** @nullable */
+  earliestEmail?: string | null;
+  /** @nullable */
+  latestEmail?: string | null;
+}
+
+export interface SummarizeEmailsBody {
+  emails: Email[];
+}
+
+export interface ErrorResponse {
+  error: string;
+}
+
+export type GetEmailsParams = {
+  /**
+   * ISO date string - fetch emails since this date
+   */
+  since?: string;
+  /**
+   * Maximum number of emails to return (default 50)
+   */
+  top?: number;
+};
+
+export type GetEmailDigestParams = {
+  /**
+   * ISO date string - digest for emails since this date
+   */
+  since?: string;
+};

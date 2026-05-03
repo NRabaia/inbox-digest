@@ -14,3 +14,92 @@ import * as zod from "zod";
 export const HealthCheckResponse = zod.object({
   status: zod.string(),
 });
+
+/**
+ * Loads emails from Outlook inbox with optional date range
+ * @summary Fetch emails from Outlook
+ */
+export const GetEmailsQueryParams = zod.object({
+  since: zod.coerce
+    .string()
+    .optional()
+    .describe("ISO date string - fetch emails since this date"),
+  top: zod.coerce
+    .number()
+    .optional()
+    .describe("Maximum number of emails to return (default 50)"),
+});
+
+export const GetEmailsResponseItem = zod.object({
+  id: zod.string(),
+  subject: zod.string().nullish(),
+  bodyPreview: zod.string().nullish(),
+  from: zod.string().nullish(),
+  fromEmail: zod.string().nullish(),
+  receivedAt: zod.string(),
+  isRead: zod.boolean(),
+  importance: zod.enum(["low", "normal", "high"]),
+  hasAttachments: zod.boolean(),
+  webLink: zod.string().nullish(),
+});
+export const GetEmailsResponse = zod.array(GetEmailsResponseItem);
+
+/**
+ * Uses AI to summarize emails and flag those needing a response
+ * @summary Summarize a batch of emails with AI
+ */
+export const SummarizeEmailsBody = zod.object({
+  emails: zod.array(
+    zod.object({
+      id: zod.string(),
+      subject: zod.string().nullish(),
+      bodyPreview: zod.string().nullish(),
+      from: zod.string().nullish(),
+      fromEmail: zod.string().nullish(),
+      receivedAt: zod.string(),
+      isRead: zod.boolean(),
+      importance: zod.enum(["low", "normal", "high"]),
+      hasAttachments: zod.boolean(),
+      webLink: zod.string().nullish(),
+    }),
+  ),
+});
+
+export const SummarizeEmailsResponseItem = zod.object({
+  emailId: zod.string(),
+  subject: zod.string().nullish(),
+  from: zod.string().nullish(),
+  receivedAt: zod.string(),
+  summary: zod.string(),
+  needsReply: zod.boolean(),
+  urgency: zod.enum(["low", "medium", "high"]),
+  suggestedAction: zod.string().nullish(),
+  keyPoints: zod.array(zod.string()),
+});
+export const SummarizeEmailsResponse = zod.array(SummarizeEmailsResponseItem);
+
+/**
+ * Returns aggregated stats and highlights about the inbox
+ * @summary Get overall inbox digest
+ */
+export const GetEmailDigestQueryParams = zod.object({
+  since: zod.coerce
+    .string()
+    .optional()
+    .describe("ISO date string - digest for emails since this date"),
+});
+
+export const GetEmailDigestResponse = zod.object({
+  totalEmails: zod.number(),
+  unreadEmails: zod.number(),
+  needsReplyCount: zod.number(),
+  highUrgencyCount: zod.number(),
+  topSenders: zod.array(
+    zod.object({
+      sender: zod.string(),
+      count: zod.number(),
+    }),
+  ),
+  earliestEmail: zod.string().nullish(),
+  latestEmail: zod.string().nullish(),
+});
