@@ -13,7 +13,7 @@
  * including the .exe.
  */
 import { execSync } from "node:child_process";
-import { writeFile, copyFile, existsSync } from "node:fs";
+import { existsSync, createWriteStream } from "node:fs";
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -33,7 +33,7 @@ const seaConfig = {
   output: "sea-prep.blob",
   disableExperimentalSEAWarning: true,
   useSnapshot: false,
-  useCodeCache: true,
+  useCodeCache: false,
 };
 await fs.writeFile(
   path.join(distDir, "sea-config.json"),
@@ -61,7 +61,7 @@ if (process.platform === "win32") {
   console.log(`  Downloading Windows node from ${winNodeUrl}...`);
 
   await new Promise((resolve, reject) => {
-    const file = require("node:fs").createWriteStream(downloadPath);
+    const file = createWriteStream(downloadPath);
     https
       .get(winNodeUrl, (response) => {
         if (response.statusCode === 302 || response.statusCode === 301) {
