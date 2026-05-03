@@ -4,8 +4,8 @@ import {
   SummarizeEmailsBody,
   GetEmailDigestQueryParams,
 } from "@workspace/api-zod";
-import { openai } from "@workspace/integrations-openai-ai-server";
 import { batchProcess } from "@workspace/integrations-openai-ai-server/batch";
+import { getAIConfig } from "../lib/aiClient";
 
 const router: IRouter = Router();
 
@@ -146,8 +146,9 @@ From: ${email.from ?? "Unknown"} <${email.fromEmail ?? ""}>
 Received: ${email.receivedAt}
 Preview: ${email.bodyPreview ?? "(no preview)"}`;
 
-        const response = await openai.chat.completions.create({
-          model: "gpt-5-mini",
+        const ai = getAIConfig();
+        const response = await ai.client.chat.completions.create({
+          model: ai.model,
           max_completion_tokens: 500,
           messages: [
             {

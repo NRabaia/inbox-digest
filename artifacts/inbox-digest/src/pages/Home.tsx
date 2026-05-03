@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect, useRef } from "react";
 import { format, subDays, isAfter } from "date-fns";
 import { 
   useGetEmails, 
@@ -11,10 +11,17 @@ import type { Email, EmailSummary } from "@workspace/api-client-react/src/genera
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
-import { Calendar as CalendarIcon, Loader2, Mail, CheckCircle2, AlertCircle, ArrowRight, XCircle, Inbox, Link as LinkIcon, RefreshCcw } from "lucide-react";
+import { Calendar as CalendarIcon, Loader2, Mail, CheckCircle2, AlertCircle, ArrowRight, XCircle, Inbox, Link as LinkIcon, RefreshCcw, UploadCloud } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+
+type Config = {
+  aiProvider?: string;
+  outlookConfigured?: boolean;
+  standaloneMode?: boolean;
+};
 
 export default function Home() {
   const [date, setDate] = useState<Date>(subDays(new Date(), 14));
@@ -22,30 +29,43 @@ export default function Home() {
   const [summaries, setSummaries] = useState<EmailSummary[]>([]);
   const [hasStarted, setHasStarted] = useState(false);
   const [filter, setFilter] = useState<"all" | "needs-reply" | "high-priority" | "unread">("all");
+  
+  const [sourceMode, setSourceMode] = useState<"live" | "upload">("live");
+  const [uploadedEmails, setUploadedEmails] = useState<Email[]>([]);
+  const [isUploading, setIsUploading] = useState(false);
+  const [config, setConfig] = useState<Config | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const isoDate = date.toISOString();
 
-  // Queries
+  useEffect(() => {
+    fetch('/api/config')
+      .then(res => res.json())
+      .then(data => setConfig(data))
+      .catch(console.error);
+  }, []);
+
+  // Queries (only enabled in live mode)
   const { 
-    data: emails, 
+    data: liveEmails, 
     isLoading: emailsLoading, 
     error: emailsError,
     refetch: refetchEmails
   } = useGetEmails({ since: isoDate }, { 
     query: { 
-      enabled: hasStarted, 
+      enabled: hasStarted && sourceMode === "live", 
       queryKey: getGetEmailsQueryKey({ since: isoDate }),
       retry: false
     } 
   });
 
   const { 
-    data: digest, 
+    data: liveDigest, 
     isLoading: digestLoading,
     error: digestError
   } = useGetEmailDigest({ since: isoDate }, { 
     query: { 
-      enabled: hasStarted, 
+      enabled: hasStarted && sourceMode === "live", 
       queryKey: getGetEmailDigestQueryKey({ since: isoDate }),
       retry: false
     } 
@@ -53,7 +73,7 @@ export default function Home() {
 
   const summarizeMutation = useSummarizeEmails();
 
-  const handleStart = () => {
+  const handleStartLive = () => {
     setHasStarted(true);
     setIsAnalyzing(true);
     setSummaries([]);
@@ -74,15 +94,54 @@ export default function Home() {
     });
   };
 
-  const isAuthError = (emailsError as any)?.response?.status === 401 || (digestError as any)?.response?.status === 401;
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!e.target.files?.length) return;
+    setIsUploading(true);
+    setUploadedEmails([]);
+    setSummaries([]);
+    setHasStarted(false);
+    
+    const formData = new FormData();
+    Array.from(e.target.files).forEach(file => formData.append("files", file));
+    
+    try {
+      const res = await fetch("/api/emails/upload-eml", {
+        method: "POST",
+        body: formData
+      });
+      if (!res.ok) throw new Error("Upload failed");
+      const emails: Email[] = await res.json();
+      setUploadedEmails(emails);
+      
+      setIsAnalyzing(true);
+      setHasStarted(true);
+      summarizeMutation.mutate({ data: { emails } }, {
+        onSuccess: (data) => {
+          setSummaries(data);
+          setIsAnalyzing(false);
+        },
+        onError: () => setIsAnalyzing(false)
+      });
+    } catch (err) {
+      console.error(err);
+      setIsUploading(false);
+      setHasStarted(false);
+    } finally {
+      setIsUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
+
+  const isAuthError = sourceMode === "live" && ((emailsError as any)?.response?.status === 401 || (digestError as any)?.response?.status === 401);
+
+  const activeEmails = sourceMode === "live" ? (liveEmails || []) : uploadedEmails;
 
   const enrichedEmails = useMemo(() => {
-    if (!emails) return [];
-    return emails.map(email => {
+    return activeEmails.map(email => {
       const summary = summaries.find(s => s.emailId === email.id);
       return { ...email, aiSummary: summary };
     });
-  }, [emails, summaries]);
+  }, [activeEmails, summaries]);
 
   const filteredEmails = useMemo(() => {
     let result = enrichedEmails;
@@ -109,6 +168,28 @@ export default function Home() {
     });
   }, [enrichedEmails, filter]);
 
+  const activeDigest = useMemo(() => {
+    if (sourceMode === "live") return liveDigest;
+    if (sourceMode === "upload" && uploadedEmails.length > 0) {
+      // Compute basic digest for uploaded files
+      const senders = uploadedEmails.reduce((acc, email) => {
+        const existing = acc.find(s => s.sender === email.from);
+        if (existing) existing.count++;
+        else acc.push({ sender: email.from, count: 1 });
+        return acc;
+      }, [] as { sender: string; count: number }[]);
+      
+      return {
+        totalEmails: uploadedEmails.length,
+        unreadEmails: uploadedEmails.filter(e => !e.isRead).length,
+        needsReplyCount: summaries.filter(s => s.needsReply).length,
+        highUrgencyCount: summaries.filter(s => s.urgency === "high").length,
+        topSenders: senders.sort((a, b) => b.count - a.count).slice(0, 5)
+      };
+    }
+    return null;
+  }, [sourceMode, liveDigest, uploadedEmails, summaries]);
+
 
   return (
     <div className="min-h-screen flex flex-col items-center p-6 md:p-12 w-full max-w-5xl mx-auto">
@@ -119,40 +200,104 @@ export default function Home() {
             Inbox Digest
           </h1>
           <p className="text-muted-foreground mt-1 text-lg">Your calm, prioritized catch-up assistant.</p>
+          <div className="flex items-center gap-2 mt-3">
+            {config?.aiProvider && (
+              <Badge variant="secondary" className="font-normal text-xs px-2 py-0.5">
+                AI: {config.aiProvider}
+              </Badge>
+            )}
+            {config?.standaloneMode && (
+              <Badge variant="outline" className="font-normal text-xs px-2 py-0.5">
+                Standalone Mode
+              </Badge>
+            )}
+            {config?.outlookConfigured === false && sourceMode === "live" && (
+              <Badge variant="destructive" className="font-normal text-xs px-2 py-0.5">
+                Outlook not connected — upload .eml instead
+              </Badge>
+            )}
+          </div>
         </div>
 
-        <div className="flex items-center gap-4 bg-card p-2 rounded-xl shadow-sm border">
-          <div className="flex items-center gap-2 px-2">
-            <span className="text-sm font-medium text-muted-foreground whitespace-nowrap">I was away since:</span>
-            <Popover>
-              <PopoverTrigger asChild>
-                <Button variant="outline" className="w-[160px] justify-start text-left font-normal border-0 shadow-none hover:bg-muted">
-                  <CalendarIcon className="mr-2 h-4 w-4" />
-                  {date ? format(date, "PPP") : <span>Pick a date</span>}
+        <div className="flex flex-col gap-3 w-full md:w-auto">
+          <Tabs value={sourceMode} onValueChange={(v) => setSourceMode(v as "live" | "upload")} className="w-full">
+            <TabsList className="grid w-full grid-cols-2">
+              <TabsTrigger value="live">Live Outlook</TabsTrigger>
+              <TabsTrigger value="upload">Upload .eml files</TabsTrigger>
+            </TabsList>
+          </Tabs>
+
+          <div className="flex items-center gap-4 bg-card p-2 rounded-xl shadow-sm border justify-center">
+            {sourceMode === "live" ? (
+              <>
+                <div className="flex items-center gap-2 px-2">
+                  <span className="text-sm font-medium text-muted-foreground whitespace-nowrap">I was away since:</span>
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button variant="outline" className="w-[160px] justify-start text-left font-normal border-0 shadow-none hover:bg-muted">
+                        <CalendarIcon className="mr-2 h-4 w-4" />
+                        {date ? format(date, "PPP") : <span>Pick a date</span>}
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0">
+                      <Calendar
+                        mode="single"
+                        selected={date}
+                        onSelect={(d) => d && setDate(d)}
+                        initialFocus
+                      />
+                    </PopoverContent>
+                  </Popover>
+                </div>
+                <Separator orientation="vertical" className="h-8" />
+                <Button 
+                  onClick={handleStartLive} 
+                  disabled={isAnalyzing || emailsLoading || summarizeMutation.isPending}
+                  className="rounded-lg px-6"
+                >
+                  {isAnalyzing || emailsLoading || summarizeMutation.isPending ? (
+                    <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Analyzing...</>
+                  ) : (
+                    <><RefreshCcw className="w-4 h-4 mr-2" /> Catch Me Up</>
+                  )}
                 </Button>
-              </PopoverTrigger>
-              <PopoverContent className="w-auto p-0">
-                <Calendar
-                  mode="single"
-                  selected={date}
-                  onSelect={(d) => d && setDate(d)}
-                  initialFocus
-                />
-              </PopoverContent>
-            </Popover>
-          </div>
-          <Separator orientation="vertical" className="h-8" />
-          <Button 
-            onClick={handleStart} 
-            disabled={isAnalyzing || emailsLoading || summarizeMutation.isPending}
-            className="rounded-lg px-6"
-          >
-            {isAnalyzing || emailsLoading || summarizeMutation.isPending ? (
-              <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Analyzing...</>
+              </>
             ) : (
-              <><RefreshCcw className="w-4 h-4 mr-2" /> Catch Me Up</>
+              <div 
+                className="flex items-center w-full px-2 py-1"
+                onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); }}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+                    const event = { target: { files: e.dataTransfer.files } } as unknown as React.ChangeEvent<HTMLInputElement>;
+                    handleFileUpload(event);
+                  }
+                }}
+              >
+                <input 
+                  type="file" 
+                  multiple 
+                  accept=".eml" 
+                  className="hidden" 
+                  ref={fileInputRef}
+                  onChange={handleFileUpload}
+                />
+                <Button 
+                  variant="ghost" 
+                  className="w-full border border-dashed border-border flex items-center justify-center gap-2 h-10 bg-muted/30 hover:bg-muted"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={isUploading || isAnalyzing || summarizeMutation.isPending}
+                >
+                  {isUploading ? (
+                    <><Loader2 className="w-4 h-4 animate-spin" /> Uploading...</>
+                  ) : (
+                    <><UploadCloud className="w-4 h-4 text-primary" /> Drag & drop or click to select .eml files</>
+                  )}
+                </Button>
+              </div>
             )}
-          </Button>
+          </div>
         </div>
       </header>
 
@@ -173,7 +318,7 @@ export default function Home() {
       {hasStarted && !isAuthError && (
         <div className="w-full flex flex-col gap-8">
           
-          {(isAnalyzing || emailsLoading || digestLoading) && !summaries.length && (
+          {(isAnalyzing || (sourceMode === "live" && (emailsLoading || digestLoading))) && !summaries.length && (
              <div className="w-full flex flex-col items-center justify-center py-24 text-muted-foreground">
                <Loader2 className="w-10 h-10 animate-spin text-primary mb-4" />
                <h3 className="text-xl font-medium text-foreground">Reading your inbox...</h3>
@@ -181,8 +326,16 @@ export default function Home() {
              </div>
           )}
 
-          {!isAnalyzing && !emailsLoading && digest && summaries.length > 0 && (
+          {!isAnalyzing && !(sourceMode === "live" && emailsLoading) && activeDigest && summaries.length > 0 && (
             <>
+              {sourceMode === "upload" && (
+                <div className="w-full mb-2 flex justify-between items-center bg-primary/10 border border-primary/20 text-primary-foreground rounded-lg p-3 px-4 shadow-sm">
+                  <div className="flex items-center gap-2">
+                    <CheckCircle2 className="w-5 h-5 text-primary" />
+                    <span className="text-sm font-medium text-foreground">Files loaded: {uploadedEmails.length} emails</span>
+                  </div>
+                </div>
+              )}
               {/* Stats Banner */}
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4 w-full">
                 <Card className="bg-card shadow-sm border-border/50">
@@ -190,7 +343,7 @@ export default function Home() {
                     <CardTitle className="text-sm font-medium text-muted-foreground uppercase tracking-wider">Total Emails</CardTitle>
                   </CardHeader>
                   <CardContent>
-                    <div className="text-3xl font-semibold">{digest.totalEmails}</div>
+                    <div className="text-3xl font-semibold">{activeDigest.totalEmails}</div>
                   </CardContent>
                 </Card>
                 <Card className="bg-card shadow-sm border-border/50">
@@ -198,7 +351,7 @@ export default function Home() {
                     <CardTitle className="text-sm font-medium text-muted-foreground uppercase tracking-wider">Unread</CardTitle>
                   </CardHeader>
                   <CardContent>
-                    <div className="text-3xl font-semibold">{digest.unreadEmails}</div>
+                    <div className="text-3xl font-semibold">{activeDigest.unreadEmails}</div>
                   </CardContent>
                 </Card>
                 <Card className="bg-card shadow-sm border-primary/20 bg-primary/5">
@@ -206,7 +359,7 @@ export default function Home() {
                     <CardTitle className="text-sm font-medium text-primary uppercase tracking-wider">Needs Reply</CardTitle>
                   </CardHeader>
                   <CardContent>
-                    <div className="text-3xl font-semibold text-primary">{digest.needsReplyCount}</div>
+                    <div className="text-3xl font-semibold text-primary">{activeDigest.needsReplyCount}</div>
                   </CardContent>
                 </Card>
                 <Card className="bg-card shadow-sm border-destructive/20 bg-destructive/5">
@@ -214,7 +367,7 @@ export default function Home() {
                     <CardTitle className="text-sm font-medium text-destructive uppercase tracking-wider">High Urgency</CardTitle>
                   </CardHeader>
                   <CardContent>
-                    <div className="text-3xl font-semibold text-destructive">{digest.highUrgencyCount}</div>
+                    <div className="text-3xl font-semibold text-destructive">{activeDigest.highUrgencyCount}</div>
                   </CardContent>
                 </Card>
               </div>
@@ -314,13 +467,13 @@ export default function Home() {
                     </CardHeader>
                     <CardContent>
                       <ul className="space-y-4">
-                        {digest.topSenders.slice(0, 5).map((sender, idx) => (
+                        {activeDigest.topSenders.slice(0, 5).map((sender, idx) => (
                           <li key={idx} className="flex items-center justify-between">
                             <span className="text-sm font-medium truncate pr-4">{sender.sender}</span>
                             <Badge variant="secondary" className="shrink-0">{sender.count}</Badge>
                           </li>
                         ))}
-                        {digest.topSenders.length === 0 && (
+                        {activeDigest.topSenders.length === 0 && (
                           <li className="text-sm text-muted-foreground text-center py-4">No data available</li>
                         )}
                       </ul>
