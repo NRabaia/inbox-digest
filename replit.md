@@ -10,7 +10,7 @@ A website that loads Outlook emails, summarizes them with AI, and flags ones nee
 
 ### Artifacts
 - `artifacts/inbox-digest` — React + Vite frontend. Two source modes: Live Outlook + Upload .eml. Drag‑drop upload, AI provider badge, "Outlook not connected" warning.
-- `artifacts/api-server` — Express API. Routes: `/api/emails` (list/post), `/api/emails/summarize`, `/api/emails/digest`, `/api/emails/upload-eml` (multer + mailparser), `/api/config`.
+- `artifacts/api-server` — Express API. Routes: `/api/emails` (list/post), `/api/emails/summarize`, `/api/emails/digest`, `/api/emails/upload-eml` (multer memory + mailparser), `/api/emails/upload-pst` (multer disk + pst-extractor; up to 2GB, 5000 messages, walks all folders), `/api/config`, `/api/settings`.
 - `standalone/` — Self‑contained Windows/Mac/Linux build. `pnpm --filter @workspace/standalone run build` produces `standalone/dist/{server.mjs, public/, start.bat, start.sh, README.md, .env.example}`. `pack-windows.mjs` produces a single `InboxDigest.exe` via Node SEA.
 
 ### AI Provider Abstraction

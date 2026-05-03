@@ -108,17 +108,25 @@ export default function Home() {
     setUploadedEmails([]);
     setSummaries([]);
     setHasStarted(false);
-    
+
+    const fileList = Array.from(e.target.files);
+    const isPst = fileList.length === 1 && /\.(pst|ost)$/i.test(fileList[0].name);
+
     const formData = new FormData();
-    Array.from(e.target.files).forEach(file => formData.append("files", file));
-    
+    if (isPst) {
+      formData.append("file", fileList[0]);
+    } else {
+      fileList.forEach(file => formData.append("files", file));
+    }
+
     try {
-      const res = await fetch("/api/emails/upload-eml", {
-        method: "POST",
-        body: formData
-      });
+      const res = await fetch(
+        isPst ? "/api/emails/upload-pst" : "/api/emails/upload-eml",
+        { method: "POST", body: formData },
+      );
       if (!res.ok) throw new Error("Upload failed");
-      const emails: Email[] = await res.json();
+      const data = await res.json();
+      const emails: Email[] = isPst ? data.emails : data;
       setUploadedEmails(emails);
       
       setHasStarted(true);
@@ -244,7 +252,7 @@ export default function Home() {
           <Tabs value={sourceMode} onValueChange={(v) => setSourceMode(v as "live" | "upload")} className="w-full">
             <TabsList className="grid w-full grid-cols-2">
               <TabsTrigger value="live">Live Outlook</TabsTrigger>
-              <TabsTrigger value="upload">Upload .eml files</TabsTrigger>
+              <TabsTrigger value="upload">Upload .eml / .pst</TabsTrigger>
             </TabsList>
           </Tabs>
 
@@ -299,7 +307,7 @@ export default function Home() {
                 <input 
                   type="file" 
                   multiple 
-                  accept=".eml" 
+                  accept=".eml,.pst,.ost" 
                   className="hidden" 
                   ref={fileInputRef}
                   onChange={handleFileUpload}
@@ -313,7 +321,7 @@ export default function Home() {
                   {isUploading ? (
                     <><Loader2 className="w-4 h-4 animate-spin" /> Uploading...</>
                   ) : (
-                    <><UploadCloud className="w-4 h-4 text-primary" /> Drag & drop or click to select .eml files</>
+                    <><UploadCloud className="w-4 h-4 text-primary" /> Drag & drop .eml files or one .pst backup</>
                   )}
                 </Button>
               </div>
